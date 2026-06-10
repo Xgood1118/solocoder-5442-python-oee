@@ -4,6 +4,8 @@ from modules.production import (
     get_production_record,
     aggregate_production_by_dimension,
     validate_routing_consistency,
+    detect_routing_inconsistencies,
+    verify_downtime_consistency,
 )
 from data.mock_data import get_all_lines, get_all_products, get_routing, get_holidays
 
@@ -94,3 +96,33 @@ def validate_routing():
 def list_holidays():
     results = get_holidays()
     return jsonify(results)
+
+
+@production_bp.route('/detect-routing-inconsistencies', methods=['GET'])
+def check_routing_inconsistencies():
+    line_id = request.args.get('line_id')
+    start_date = request.args.get('start_date')
+    end_date = request.args.get('end_date')
+    tolerance = request.args.get('tolerance_percent', 5, type=float)
+
+    results = detect_routing_inconsistencies(
+        line_id=line_id, start_date=start_date, end_date=end_date,
+        tolerance_percent=tolerance
+    )
+    return jsonify({
+        'total_issues': len(results),
+        'issues': results,
+    })
+
+
+@production_bp.route('/verify-downtime-consistency', methods=['GET'])
+def check_downtime_consistency():
+    line_id = request.args.get('line_id')
+    shift = request.args.get('shift')
+    start_date = request.args.get('start_date')
+    end_date = request.args.get('end_date')
+
+    result = verify_downtime_consistency(
+        line_id=line_id, shift=shift, start_date=start_date, end_date=end_date
+    )
+    return jsonify(result)

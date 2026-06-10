@@ -38,26 +38,27 @@ def check_continuous_low_oee(line_id=None, end_date=None, consecutive_days=None,
         lid = line['id']
         daily_trend = get_daily_trend(
             line_id=lid,
-            start_date=(end_date - timedelta(days=consecutive_days * 2)).isoformat(),
+            start_date=(end_date - timedelta(days=consecutive_days * 5)).isoformat(),
             end_date=end_date.isoformat(),
         )
 
-        production_days = [d for d in daily_trend if d['has_production'] and not d['is_holiday']]
+        production_days = [d for d in daily_trend if d['has_production']]
         production_days.sort(key=lambda x: x['date'], reverse=True)
 
         low_days = []
+        matched_window = None
         for day in production_days:
             if day['oee'] < threshold:
                 low_days.append(day)
                 if len(low_days) >= consecutive_days:
+                    matched_window = list(low_days)
                     break
             else:
                 low_days = []
-                break
 
-        if len(low_days) >= consecutive_days:
-            low_days.reverse()
-            avg_oee = sum(d['oee'] for d in low_days) / len(low_days)
+        if matched_window and len(matched_window) >= consecutive_days:
+            matched_window.reverse()
+            avg_oee = sum(d['oee'] for d in matched_window) / len(matched_window)
             alert = {
                 'id': _next_alert_id(),
                 'line_id': lid,
@@ -75,11 +76,11 @@ def check_continuous_low_oee(line_id=None, end_date=None, consecutive_days=None,
                         'performance': d['performance'],
                         'quality': d['quality'],
                     }
-                    for d in low_days
+                    for d in matched_window
                 ],
                 'avg_oee': avg_oee,
-                'start_date': low_days[0]['date'],
-                'end_date': low_days[-1]['date'],
+                'start_date': matched_window[0]['date'],
+                'end_date': matched_window[-1]['date'],
                 'detected_at': end_date.isoformat(),
                 'status': 'pending',
             }

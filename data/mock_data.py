@@ -38,8 +38,10 @@ for i in range(30):
 holidays = list(_holidays)
 
 
-def _generate_production_records():
-    records = []
+def _generate_production_and_downtime_records():
+    production_records = []
+    downtime_records = []
+
     base = date(2026, 6, 1)
     shifts = ['morning', 'afternoon', 'night']
 
@@ -47,7 +49,12 @@ def _generate_production_records():
         'line_01': {
             'good_rate_base': 0.96,
             'performance_base': 0.92,
-            'downtime_minutes_per_shift': 30,
+            'downtime_per_shift': {
+                'equipment_failure': {'minutes': 8, 'count': 1},
+                'mold_change': {'minutes': 15, 'count': 1},
+                'material_wait': {'minutes': 5, 'count': 1},
+                'rest': {'minutes': 10, 'count': 1},
+            },
             'products': [
                 {'prod': 'prod_a', 'target': 200, 'weight': 0.6},
                 {'prod': 'prod_b', 'target': 120, 'weight': 0.4},
@@ -56,7 +63,13 @@ def _generate_production_records():
         'line_02': {
             'good_rate_base': 0.94,
             'performance_base': 0.88,
-            'downtime_minutes_per_shift': 50,
+            'downtime_per_shift': {
+                'equipment_failure': {'minutes': 12, 'count': 1},
+                'mold_change': {'minutes': 20, 'count': 1},
+                'material_wait': {'minutes': 10, 'count': 1},
+                'idling': {'minutes': 8, 'count': 2},
+                'rest': {'minutes': 10, 'count': 1},
+            },
             'products': [
                 {'prod': 'prod_a', 'target': 180, 'weight': 0.5},
                 {'prod': 'prod_c', 'target': 80, 'weight': 0.5},
@@ -65,7 +78,13 @@ def _generate_production_records():
         'line_03': {
             'good_rate_base': 0.91,
             'performance_base': 0.82,
-            'downtime_minutes_per_shift': 70,
+            'downtime_per_shift': {
+                'equipment_failure': {'minutes': 25, 'count': 2},
+                'mold_change': {'minutes': 30, 'count': 1},
+                'reduced_speed': {'minutes': 20, 'count': 1},
+                'rest': {'minutes': 10, 'count': 1},
+                'startup_loss': {'minutes': 5, 'count': 1},
+            },
             'products': [
                 {'prod': 'prod_b', 'target': 150, 'weight': 1.0},
             ],
@@ -73,96 +92,20 @@ def _generate_production_records():
         'line_04': {
             'good_rate_base': 0.85,
             'performance_base': 0.75,
-            'downtime_minutes_per_shift': 100,
+            'downtime_per_shift': {
+                'equipment_failure': {'minutes': 40, 'count': 3},
+                'mold_change': {'minutes': 25, 'count': 1},
+                'material_wait': {'minutes': 15, 'count': 1},
+                'idling': {'minutes': 10, 'count': 2},
+                'reduced_speed': {'minutes': 15, 'count': 1},
+                'startup_loss': {'minutes': 8, 'count': 1},
+                'rest': {'minutes': 10, 'count': 1},
+            },
             'products': [
                 {'prod': 'prod_b', 'target': 100, 'weight': 0.5},
                 {'prod': 'prod_c', 'target': 70, 'weight': 0.5},
             ],
         },
-    }
-
-    rid = 1
-    for day_offset in range(10):
-        d = base + timedelta(days=day_offset)
-        is_holiday = d.isoformat() in holidays
-        for shift in shifts:
-            for line_id, scenario in scenarios.items():
-                if is_holiday and line_id in ['line_03', 'line_04']:
-                    continue
-
-                prod_info = scenario['products'][day_offset % len(scenario['products'])]
-                product_id = prod_info['prod']
-                cycle = routing.get((product_id, line_id), {}).get('cycle_time_minutes', 3.0)
-                planned_minutes = 480 - 60
-
-                noise = 1 + (day_offset % 5 - 2) * 0.03
-                actual_output = int(prod_info['target'] * scenario['performance_base'] * noise)
-                good_output = int(actual_output * scenario['good_rate_base'] * noise)
-                defect_output = actual_output - good_output
-
-                actual_run_minutes = planned_minutes - scenario['downtime_minutes_per_shift']
-                theoretical_output = int(actual_run_minutes / cycle)
-
-                record = {
-                    'id': f'prod_{rid:05d}',
-                    'date': d.isoformat(),
-                    'shift': shift,
-                    'line_id': line_id,
-                    'product_id': product_id,
-                    'planned_production_minutes': planned_minutes,
-                    'actual_run_minutes': actual_run_minutes,
-                    'total_output': actual_output,
-                    'good_output': good_output,
-                    'defect_output': defect_output,
-                    'theoretical_output': theoretical_output,
-                    'cycle_time_minutes': cycle,
-                    'is_holiday': is_holiday,
-                    'has_production': True,
-                }
-                records.append(record)
-                rid += 1
-
-    return records
-
-
-production_records = _generate_production_records()
-
-
-def _generate_downtime_records():
-    records = []
-    base = date(2026, 6, 1)
-    shifts = ['morning', 'afternoon', 'night']
-
-    categories_dist = {
-        'line_01': [
-            {'cat': 'equipment_failure', 'minutes': 8, 'count': 1},
-            {'cat': 'mold_change', 'minutes': 15, 'count': 1},
-            {'cat': 'material_wait', 'minutes': 5, 'count': 1},
-            {'cat': 'rest', 'minutes': 10, 'count': 1},
-        ],
-        'line_02': [
-            {'cat': 'equipment_failure', 'minutes': 12, 'count': 1},
-            {'cat': 'mold_change', 'minutes': 20, 'count': 1},
-            {'cat': 'material_wait', 'minutes': 10, 'count': 1},
-            {'cat': 'idling', 'minutes': 8, 'count': 2},
-            {'cat': 'rest', 'minutes': 10, 'count': 1},
-        ],
-        'line_03': [
-            {'cat': 'equipment_failure', 'minutes': 25, 'count': 2},
-            {'cat': 'mold_change', 'minutes': 30, 'count': 1},
-            {'cat': 'reduced_speed', 'minutes': 20, 'count': 1},
-            {'cat': 'rest', 'minutes': 10, 'count': 1},
-            {'cat': 'startup_loss', 'minutes': 5, 'count': 1},
-        ],
-        'line_04': [
-            {'cat': 'equipment_failure', 'minutes': 40, 'count': 3},
-            {'cat': 'mold_change', 'minutes': 25, 'count': 1},
-            {'cat': 'material_wait', 'minutes': 15, 'count': 1},
-            {'cat': 'idling', 'minutes': 10, 'count': 2},
-            {'cat': 'reduced_speed', 'minutes': 15, 'count': 1},
-            {'cat': 'startup_loss', 'minutes': 8, 'count': 1},
-            {'cat': 'rest', 'minutes': 10, 'count': 1},
-        ],
     }
 
     root_causes = {
@@ -171,46 +114,91 @@ def _generate_downtime_records():
         'material_wait': ['物料缺货', '来料检验', '物料配送延迟'],
     }
 
+    rid = 1
     did = 1
+
     for day_offset in range(10):
         d = base + timedelta(days=day_offset)
-        is_holiday = d.isoformat() in holidays
+        day_is_holiday = d.isoformat() in holidays
+
         for shift in shifts:
-            for line_id, cats in categories_dist.items():
-                if is_holiday and line_id in ['line_03', 'line_04']:
+            for line_id, scenario in scenarios.items():
+                line_skipped = day_is_holiday and line_id in ['line_03', 'line_04']
+                if line_skipped:
                     continue
 
-                for cat_info in cats:
-                    cat = cat_info['cat']
-                    per_event_minutes = cat_info['minutes']
-                    count = cat_info['count']
+                shift_downtime_items = []
+                shift_total_downtime = 0
+
+                for cat, cat_cfg in scenario['downtime_per_shift'].items():
+                    per_event = cat_cfg['minutes']
+                    count = cat_cfg['count']
 
                     if day_offset % 3 == 0 and cat == 'equipment_failure':
-                        per_event_minutes = per_event_minutes * 2
+                        per_event = per_event * 2
 
                     for i in range(count):
-                        is_big = per_event_minutes >= 15
+                        is_big = per_event >= 15
                         rc_list = root_causes.get(cat, [])
                         root_cause = rc_list[(day_offset + i) % len(rc_list)] if rc_list else None
 
-                        record = {
+                        dt_record = {
                             'id': f'dt_{did:05d}',
                             'date': d.isoformat(),
                             'shift': shift,
                             'line_id': line_id,
                             'category': cat,
-                            'duration_minutes': per_event_minutes,
+                            'duration_minutes': per_event,
                             'is_big_loss': is_big,
                             'root_cause': root_cause,
                             'description': f'{cat}停机事件',
                         }
-                        records.append(record)
+                        shift_downtime_items.append(dt_record)
+                        shift_total_downtime += per_event
                         did += 1
 
-    return records
+                downtime_records.extend(shift_downtime_items)
+
+                prod_info = scenario['products'][day_offset % len(scenario['products'])]
+                product_id = prod_info['prod']
+                cycle = routing.get((product_id, line_id), {}).get('cycle_time_minutes', 3.0)
+                planned_minutes = 480 - 60
+
+                actual_run_minutes = max(0, planned_minutes - shift_total_downtime)
+
+                noise = 1 + (day_offset % 5 - 2) * 0.03
+                effective_performance = scenario['performance_base'] * noise
+                actual_output = max(0, int((actual_run_minutes / cycle) * min(1.0, effective_performance)))
+                good_output = int(actual_output * scenario['good_rate_base'] * noise)
+                good_output = min(good_output, actual_output)
+                defect_output = actual_output - good_output
+                theoretical_output = max(0, int(actual_run_minutes / cycle))
+
+                prod_record = {
+                    'id': f'prod_{rid:05d}',
+                    'date': d.isoformat(),
+                    'shift': shift,
+                    'line_id': line_id,
+                    'product_id': product_id,
+                    'planned_production_minutes': planned_minutes,
+                    'actual_run_minutes': actual_run_minutes,
+                    'total_downtime_minutes': shift_total_downtime,
+                    'total_output': actual_output,
+                    'good_output': good_output,
+                    'defect_output': defect_output,
+                    'theoretical_output': theoretical_output,
+                    'cycle_time_minutes': cycle,
+                    'is_holiday': day_is_holiday,
+                    'has_production': True,
+                    'line_stopped': line_skipped,
+                }
+                production_records.append(prod_record)
+                rid += 1
+
+    return production_records, downtime_records
 
 
-downtime_records = _generate_downtime_records()
+production_records, downtime_records = _generate_production_and_downtime_records()
 
 
 _alerts = []

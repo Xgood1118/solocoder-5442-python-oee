@@ -11,17 +11,19 @@ def calculate_oee_for_record(prod_record):
     actual_run_minutes = prod_record['actual_run_minutes']
     total_output = prod_record['total_output']
     good_output = prod_record['good_output']
-    theoretical_output = prod_record['theoretical_output']
+    cycle_time_minutes = prod_record.get('cycle_time_minutes', 0)
 
     if planned_minutes <= 0:
         availability = 0
     else:
         availability = actual_run_minutes / planned_minutes
 
-    if theoretical_output <= 0:
+    if actual_run_minutes <= 0 or total_output <= 0 or cycle_time_minutes <= 0:
         performance = 0
     else:
-        performance = total_output / theoretical_output
+        performance = (cycle_time_minutes * total_output) / actual_run_minutes
+        if performance > 1.0:
+            performance = 1.0
 
     if total_output <= 0:
         quality = 0
@@ -60,17 +62,22 @@ def calculate_oee_aggregated(records):
     total_run = sum(r['actual_run_minutes'] for r in records)
     total_output = sum(r['total_output'] for r in records)
     total_good = sum(r['good_output'] for r in records)
-    total_theoretical = sum(r['theoretical_output'] for r in records)
+    total_cycle_x_output = sum(
+        (r.get('cycle_time_minutes', 0) or 0) * r['total_output']
+        for r in records
+    )
 
     if total_planned <= 0:
         availability = 0
     else:
         availability = total_run / total_planned
 
-    if total_theoretical <= 0:
+    if total_run <= 0 or total_cycle_x_output <= 0:
         performance = 0
     else:
-        performance = total_output / total_theoretical
+        performance = total_cycle_x_output / total_run
+        if performance > 1.0:
+            performance = 1.0
 
     if total_output <= 0:
         quality = 0
@@ -119,10 +126,13 @@ def get_oee_by_dimension(dimension, line_id=None, product_id=None,
         else:
             availability = item['actual_run_minutes'] / item['planned_production_minutes']
 
-        if item['theoretical_output'] <= 0:
+        cycle_x_output = item.get('cycle_x_output', 0)
+        if item['actual_run_minutes'] <= 0 or cycle_x_output <= 0:
             performance = 0
         else:
-            performance = item['total_output'] / item['theoretical_output']
+            performance = cycle_x_output / item['actual_run_minutes']
+            if performance > 1.0:
+                performance = 1.0
 
         if item['total_output'] <= 0:
             quality = 0
@@ -165,12 +175,26 @@ def get_oee_detail(line_id, product_id=None, shift=None, start_date=None, end_da
         line_id=line_id, shift=shift, start_date=start_date, end_date=end_date
     )
 
+    from modules.production import verify_downtime_consistency, detect_routing_inconsistencies
+
+    downtime_consistency = verify_downtime_consistency(
+        line_id=line_id, shift=shift, start_date=start_date, end_date=end_date
+    )
+    routing_issues = detect_routing_inconsistencies(
+        line_id=line_id, start_date=start_date, end_date=end_date
+    )
+
     return {
         'line_id': line_id,
         'oee_summary': oee_summary,
         'downtime_summary': downtime_summary,
         'downtime_by_category': downtime_by_category,
         'record_count': len(records),
+        'consistency_checks': {
+            'downtime_consistency': downtime_consistency,
+            'routing_inconsistencies': routing_issues,
+            'routing_issue_count': len(routing_issues),
+        },
     }
 
 
